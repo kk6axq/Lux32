@@ -14,6 +14,8 @@ UPDATE_TOPIC = DEVICE_NAME+"/update"
 OFF_TOPIC = DEVICE_NAME+"/off"
 CMD_TOPIC = DEVICE_NAME+"/cmd"
 SET_RGB_TOPIC = DEVICE_NAME + "/set_color"
+VERT_TOPIC = DEVICE_NAME+"/fade_vertical"
+HOR_TOPIC = DEVICE_NAME + "/fade_horizontal"
 
 segment_order = [1, 2, 3, 4, 5, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 6, 30]
 
@@ -93,25 +95,26 @@ def hsv_to_rgb(h, s, v):
 
     return (r, g, b)
 mode = 1
+i = 0
 MODE_RGB = 0
 MODE_VERT_TRANS = 1
 MODE_HOR_TRANS = 2
 params = [0, 0, 0]
 async def logic():
-    global pixels, params, mode
+    global pixels, params, mode, i
 
-
-    i = 0
     hue = 20
     while 'pixels' not in globals():
         await asyncio.sleep(0.1)
     while True:
+        sleep = 0.05
         #print("Logic")
         color = hsv_to_rgb(hue, 1, 1)
         #print("Color", color, hue)
         if mode == MODE_RGB:
             set_all_color(params[0], params[1], params[2])
         if mode == MODE_VERT_TRANS:
+            sleep = params[0]
             if i >= len(top_down_seg):
                 i = 0
                 hue = hue + 10
@@ -121,6 +124,7 @@ async def logic():
                 set_segment(seg, color[0], color[1], color[2])
 
         elif mode == MODE_HOR_TRANS:
+            sleep = params[0]
             if i >= len(left_right_seg):
                 i = 0
                 hue = hue + 10
@@ -130,7 +134,7 @@ async def logic():
                 set_segment(seg, color[0], color[1], color[2])
 
         i = i + 1
-        await asyncio.sleep(0.05)
+        await asyncio.sleep(sleep)
 
 async def canvas():
     global pixels
@@ -147,8 +151,8 @@ def send_msg(topic, msg, retain=False):
     pub_queue.append([topic, msg, retain])
 
 def mqtt_callback(topic, msg, retained, qos):
-    global UPDATE_TOPIC, OFF_TOPIC, CMD_TOPIC, SET_RGB_TOPIC
-    global params, mode, MODE_RGB
+    global UPDATE_TOPIC, OFF_TOPIC, SET_RGB_TOPIC, VERT_TOPIC, HOR_TOPIC
+    global params, mode, MODE_RGB, MODE_VERT_TRANS, MODE_HOR_TRANS, i
     topic = topic.decode()
     if topic == UPDATE_TOPIC:
         print("Updating")
@@ -162,9 +166,26 @@ def mqtt_callback(topic, msg, retained, qos):
         print("Off")
         params = [0, 0, 0]
         mode = MODE_RGB
-    elif topic == CMD_TOPIC:
+    elif topic == VERT_TOPIC:
         msg = msg.decode()
-        print("Cmd: ", msg)
+        try:
+            speed = float(msg)
+        except:
+            speed = 20
+        params = [1/speed, 0, 0]
+        print("Vertical at ", speed)
+        mode = MODE_VERT_TRANS
+        i = 0
+    elif topic == HOR_TOPIC:
+        msg = msg.decode()
+        try:
+            speed = float(msg)
+        except:
+            speed = 20
+        params = [1/speed, 0, 0]
+        print("Horizontal at ", speed)
+        mode = MODE_HOR_TRANS
+        i = 0
     elif topic == SET_RGB_TOPIC:
         msg = msg.decode()
         if len(msg) != 7:
